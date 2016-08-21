@@ -1,0 +1,122 @@
+---
+title: "Machine Learning"
+author: "Cédric Remande"
+date: "Sunday, August 21, 2016"
+output: html_document
+---
+# Introduction
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behaviour, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+## What you should submit
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+# Analysis
+## How the model was build
+The following steps were executed to perform prediction with a build model
+
+- Load the test data
+- Split the test data again in a test and train set to perform cross-validation
+- Explore and clean the data to remove bad predictors
+- Build a predictions model on the train set
+- Verify the model by predicting the outcomes of the test set created from the train set. If the out of sample error is low we can continue by performing prediction on the real test set.
+
+## Loading the data
+Loading the training and test data:
+```{r}
+pmltrain <- read.csv('pml-training.csv',na.strings=c("","NA","#DIV/0!"))
+
+```
+
+
+## Cross validation
+Cross-validation will be used to split our training set into two sets: a training set and a test set. The model will be fitted with the training set and evaluated with the test set. We will now split up the original training set with a 70/30 ratio:
+```{r}
+library(caret)
+set.seed(9040)
+inTrain <- createDataPartition(y=pmltrain$classe,p=0.7,list=FALSE)
+trainData <- pmltrain[inTrain,]
+testData <- pmltrain[-inTrain,]
+```
+
+## Exploring the data
+First we try to get an overview of the data:
+```{r results='hide'}
+summary(trainData)
+```
+The results are hidden due to size. 
+
+Through this summary we found that the data has columns that have a lot of NA values. We remove all columns with more than 90% of their column filled with NA values as they are not useful predictors.
+```{r}
+trainData <- trainData[!colSums(is.na(trainData)/nrow(trainData))>.9]
+```
+
+Looking at the data we also decided to remove:
+
+- the first column which containing a row index
+- the column with the user name
+- the columns containing timing when events were logged
+columns to remove:
+```{r}
+names(trainData[,grep("X|user_name|*timestamp*",names(trainData))])
+```
+
+Predictors with very low variance are bad predictors. In a last step we look if we can find such columns using a near zero variance function:
+```{r}
+nzv <- (nearZeroVar(trainData))
+names(trainData)[nzv]
+```
+
+The data cleaned:
+```{r}
+trainData <- trainData[,-grep("X|user_name|*timestamp*",names(trainData))]
+trainData <- trainData[,-nearZeroVar(trainData)]
+names(trainData)
+```
+
+## Build the prediction model
+A random forest model is build:
+```{r}
+library(randomForest)
+set.seed(21469)
+modelFit <- randomForest(trainData$classe~.,data=trainData)
+
+```
+
+We can now look at the prediction that the model gives for the training data (created as 70% randomly selected from the original test set):
+```{r}
+predTrain <- predict(modelFit,newdata=trainData)
+confusionMatrix(predTrain,trainData$classe)
+```
+The 'in' sample error is 0% here which is of course an unrealistic estimate of the sample error. Therefore we will now test our model on the test set we build as 30% of our original test set:
+
+
+```{r}
+predTest <- predict(modelFit,newdata=testData)
+confusionMatrix(predTest,testData$classe)
+```
+We now have an out of sample accuracy of 99.8% which is a better estimate as before. Content with this accuracy we will now predict the outcomes of the real test set.
+
+# Predict on test set
+
+Load the data and predict the 20 values:
+```{r}
+pmltest <- read.csv('pml-testing.csv',na.strings=c("","NA","#DIV/0!"))
+predictions <- predict(modelFit,newdata=pmltest)
+predictions
+```
